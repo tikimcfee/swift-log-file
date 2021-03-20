@@ -53,27 +53,17 @@ public struct FileLogging {
         
 /// `FileLogHandler` is a simple implementation of `LogHandler` for directing
 /// `Logger` output to a local file. Appends log output to this file, even across constructor calls.
-public struct FileLogHandler: LogHandler {
-    private let stream: TextOutputStream
-    private var label: String
+public class FileLogHandler: LogHandler {
     
     public var logLevel: Logger.Level = .info
-
-    private var prettyMetadata: String?
+    
     public var metadata = Logger.Metadata() {
-        didSet {
-            self.prettyMetadata = self.prettify(self.metadata)
-        }
+        didSet { prettyMetadata = prettify(metadata) }
     }
-
-    public subscript(metadataKey metadataKey: String) -> Logger.Metadata.Value? {
-        get {
-            return self.metadata[metadataKey]
-        }
-        set {
-            self.metadata[metadataKey] = newValue
-        }
-    }
+    
+    private var stream: TextOutputStream
+    private var label: String
+    private var prettyMetadata: String?
     
     public init(label: String, fileLogger: FileLogging) {
         self.label = label
@@ -92,16 +82,22 @@ public struct FileLogHandler: LogHandler {
                     file: String,
                     function: String,
                     line: UInt) {
-        let prettyMetadata = metadata?.isEmpty ?? true
-            ? self.prettyMetadata
-            : self.prettify(self.metadata.merging(metadata!, uniquingKeysWith: { _, new in new }))
-
-        var stream = self.stream
-        stream.write("\(self.timestamp()) \(level) \(self.label) :\(prettyMetadata.map { " \($0)" } ?? "") \(message)\n")
+        
+        var mergeMeta: String = prettyMetadata ?? ""
+        if let loggedMeta = metadata, !loggedMeta.isEmpty {
+            mergeMeta = prettify(self.metadata.copiedMerge(of: loggedMeta))
+        }
+        
+        stream.write("[ \(timestamp()) ] [ \(level) ] [ \(label) ] | \(mergeMeta) | \(message)\n")
+    }
+    
+    public subscript(metadataKey metadataKey: String) -> Logger.Metadata.Value? {
+        get { metadata[metadataKey] }
+        set { metadata[metadataKey] = newValue }
     }
 
-    private func prettify(_ metadata: Logger.Metadata) -> String? {
-        return !metadata.isEmpty ? metadata.map { "\($0)=\($1)" }.joined(separator: " ") : nil
+    private func prettify(_ metadata: Logger.Metadata) -> String {
+        metadata.map { "\($0)=\($1)" }.joined(separator: " ")
     }
 
     private func timestamp() -> String {
@@ -114,5 +110,11 @@ public struct FileLogHandler: LogHandler {
                 String(cString: $0.baseAddress!)
             }
         }
+    }
+}
+
+extension Dictionary {
+    func copiedMerge(of target: Self) -> Self {
+        merging(target, uniquingKeysWith: { _, targetValue in targetValue } )
     }
 }
