@@ -7,6 +7,7 @@ enum TestError: Error {
 }
     
 protocol Utilities {
+
 }
 
 extension Utilities {
